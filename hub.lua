@@ -1,17 +1,20 @@
--- Hub Script using WindUI
--- Load WindUI Library
+-- Blossomi Hub
+-- WindUI Library
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
+-- ============================
 -- Create Window
+-- ============================
 local Window = WindUI:CreateWindow({
-    Title = "My Hub",
-    Author = "Author",
-    Icon = "home",
+    Title = "Blossomi Hub",
+    Author = "blossomi",
+    Icon = "flower-2",
     Width = 480,
     Theme = "Dark",
     Transparent = false,
     Acrylic = false,
     Debug = false,
+    Folder = "BlossomiHub",
 })
 
 -- ============================
@@ -19,50 +22,81 @@ local Window = WindUI:CreateWindow({
 -- ============================
 local CombatTab = Window:AddTab({ Title = "Combat", Icon = "sword" })
 
-local CombatSection = CombatTab:AddSection({ Title = "Combat Options" })
+local AttackSection = CombatTab:AddSection({ Title = "Attacks" })
 
-CombatSection:AddToggle({
-    Title = "Auto Attack",
-    Desc = "Automatically sends hit requests",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            -- Start auto attack loop
-            _G.AutoAttack = task.spawn(function()
-                while _G.AutoAttackEnabled do
-                    pcall(function()
-                        game:GetService("ReplicatedStorage").CombatSystem.Remotes.RequestHit:FireServer()
-                    end)
-                    task.wait(0.1)
-                end
-            end)
-            _G.AutoAttackEnabled = true
-        else
-            _G.AutoAttackEnabled = false
-        end
-    end,
-})
+local AbilityIndex = 1
 
-CombatSection:AddButton({
-    Title = "Fire Ability",
-    Desc = "Fires ability request to server",
-    Callback = function()
-        pcall(function()
-            local args = { [1] = 1 }
-            game:GetService("ReplicatedStorage").AbilitySystem.Remotes.RequestAbility:FireServer(unpack(args))
-        end)
-    end,
-})
-
-CombatSection:AddSlider({
+AttackSection:AddSlider({
     Title = "Ability Index",
-    Desc = "Which ability to use",
+    Desc = "Which ability slot to fire",
     Default = 1,
     Min = 1,
     Max = 10,
     Rounding = 0,
     Callback = function(Value)
-        _G.AbilityIndex = Value
+        AbilityIndex = Value
+    end,
+})
+
+AttackSection:AddButton({
+    Title = "Fire Ability",
+    Desc = "Fires your selected ability",
+    Callback = function()
+        pcall(function()
+            local args = { [1] = AbilityIndex }
+            game:GetService("ReplicatedStorage").AbilitySystem.Remotes.RequestAbility:FireServer(unpack(args))
+        end)
+    end,
+})
+
+AttackSection:AddButton({
+    Title = "Request Hit",
+    Desc = "Sends a hit request to the server",
+    Callback = function()
+        pcall(function()
+            game:GetService("ReplicatedStorage").CombatSystem.Remotes.RequestHit:FireServer()
+        end)
+    end,
+})
+
+local AutoSection = CombatTab:AddSection({ Title = "Automation" })
+
+AutoSection:AddToggle({
+    Title = "Auto Hit",
+    Desc = "Repeatedly sends hit requests",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoHitEnabled = Value
+        if Value then
+            task.spawn(function()
+                while _G.AutoHitEnabled do
+                    pcall(function()
+                        game:GetService("ReplicatedStorage").CombatSystem.Remotes.RequestHit:FireServer()
+                    end)
+                    task.wait(0.15)
+                end
+            end)
+        end
+    end,
+})
+
+AutoSection:AddToggle({
+    Title = "Auto Ability",
+    Desc = "Repeatedly fires selected ability",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoAbilityEnabled = Value
+        if Value then
+            task.spawn(function()
+                while _G.AutoAbilityEnabled do
+                    pcall(function()
+                        local args = { [1] = AbilityIndex }
+                        game:GetService("ReplicatedStorage").AbilitySystem.Remotes.RequestAbility:FireServer(unpack(args))
+                    end)
+                    task.wait(0.2)
+                end
+            end)
+        end
     end,
 })
 
@@ -73,53 +107,65 @@ local PlayerTab = Window:AddTab({ Title = "Player", Icon = "user" })
 
 local MovementSection = PlayerTab:AddSection({ Title = "Movement" })
 
-MovementSection:AddToggle({
-    Title = "Speed Hack",
-    Desc = "Increases walk speed",
-    Default = false,
-    Callback = function(Value)
-        local Player = game:GetService("Players").LocalPlayer
-        local Char = Player.Character or Player.CharacterAdded:Wait()
-        if Value then
-            Char.Humanoid.WalkSpeed = _G.SpeedValue or 50
-        else
-            Char.Humanoid.WalkSpeed = 16
-        end
-    end,
-})
+local SpeedValue = 50
+local JumpConn = nil
 
 MovementSection:AddSlider({
     Title = "Walk Speed",
-    Desc = "Set custom walk speed",
+    Desc = "Set your walk speed",
     Default = 50,
     Min = 16,
-    Max = 200,
+    Max = 250,
     Rounding = 0,
     Callback = function(Value)
-        _G.SpeedValue = Value
+        SpeedValue = Value
+    end,
+})
+
+MovementSection:AddToggle({
+    Title = "Speed Hack",
+    Desc = "Apply custom walk speed",
+    Default = false,
+    Callback = function(Value)
+        local Char = game:GetService("Players").LocalPlayer.Character
+        if Char and Char:FindFirstChild("Humanoid") then
+            Char.Humanoid.WalkSpeed = Value and SpeedValue or 16
+        end
     end,
 })
 
 MovementSection:AddToggle({
     Title = "Infinite Jump",
-    Desc = "Allows jumping in the air",
+    Desc = "Jump endlessly in the air",
     Default = false,
     Callback = function(Value)
-        _G.InfiniteJump = Value
         if Value then
-            _G.InfiniteJumpConn = game:GetService("UserInputService").JumpRequest:Connect(function()
-                if _G.InfiniteJump then
-                    local Player = game:GetService("Players").LocalPlayer
-                    local Char = Player.Character
-                    if Char then
-                        Char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
+            JumpConn = game:GetService("UserInputService").JumpRequest:Connect(function()
+                local Char = game:GetService("Players").LocalPlayer.Character
+                if Char and Char:FindFirstChild("Humanoid") then
+                    Char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             end)
         else
-            if _G.InfiniteJumpConn then
-                _G.InfiniteJumpConn:Disconnect()
+            if JumpConn then
+                JumpConn:Disconnect()
+                JumpConn = nil
             end
+        end
+    end,
+})
+
+MovementSection:AddSlider({
+    Title = "Jump Power",
+    Desc = "Set your jump height",
+    Default = 50,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Callback = function(Value)
+        local Char = game:GetService("Players").LocalPlayer.Character
+        if Char and Char:FindFirstChild("Humanoid") then
+            Char.Humanoid.JumpPower = Value
         end
     end,
 })
@@ -127,17 +173,15 @@ MovementSection:AddToggle({
 -- ============================
 -- TAB: Misc
 -- ============================
-local MiscTab = Window:AddTab({ Title = "Misc", Icon = "settings" })
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "sparkles" })
 
-local MiscSection = MiscTab:AddSection({ Title = "Miscellaneous" })
+local MiscSection = MiscTab:AddSection({ Title = "Utilities" })
 
 MiscSection:AddButton({
     Title = "Rejoin",
-    Desc = "Rejoins the current server",
+    Desc = "Rejoin the current game server",
     Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        local PlaceId = game.PlaceId
-        TeleportService:Teleport(PlaceId)
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
     end,
 })
 
@@ -145,19 +189,31 @@ MiscSection:AddButton({
     Title = "Copy UserID",
     Desc = "Copies your UserID to clipboard",
     Callback = function()
-        local Player = game:GetService("Players").LocalPlayer
-        setclipboard(tostring(Player.UserId))
+        setclipboard(tostring(game:GetService("Players").LocalPlayer.UserId))
         WindUI:Notify({
-            Title = "Copied!",
-            Content = "UserID copied to clipboard.",
+            Title = "Blossomi Hub",
+            Content = "UserID copied to clipboard!",
             Duration = 3,
         })
     end,
 })
 
--- Notification on load
+MiscSection:AddButton({
+    Title = "Reset Character",
+    Desc = "Kills and resets your character",
+    Callback = function()
+        local Char = game:GetService("Players").LocalPlayer.Character
+        if Char and Char:FindFirstChild("Humanoid") then
+            Char.Humanoid.Health = 0
+        end
+    end,
+})
+
+-- ============================
+-- Loaded Notification
+-- ============================
 WindUI:Notify({
-    Title = "Hub Loaded",
-    Content = "My Hub has been loaded successfully!",
+    Title = "Blossomi Hub",
+    Content = "Loaded successfully! Enjoy~",
     Duration = 5,
 })
